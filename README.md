@@ -1,33 +1,35 @@
 # url safety app
 
-NB: still learning golang, so I'm sure some of this could be more idiomatic 
+NB: still learning golang, so I'm sure some of this could be more idiomatic
 
 ## USAGE (assumes working go env)
 
-1. Fire up cassandra using `docker-compose`
+1. Fire up cassandra using `docker-compose up cassandra`
 2. Create a database
 
 ```
-docker exec -it cassandra_1 /usr/bin/cqlsh
-create table urls(hostname ascii, rest ascii, safe boolean, updated timestamp, PRIMARY KEY(hostname, query));	
+docker exec -it urlsafety_cassandra_1 /usr/bin/cqlsh
+CREATE KEYSPACE urlsafety WITH replication = {'class':'SimpleStrategy', 'replication_factor' : 1};
+USE urlsafety;
+create table urls(hostname ascii, rest ascii, safe boolean, updated timestamp, PRIMARY KEY(hostname, rest));
 ```
 
 3. Seed the db (currently set to 4m records)
 
 ```
-go run seed.go
+docker-compose up seed
 ```
 
 4. Run the server
 
 ```
-go run server.go
+docker-compose up urlsafety
 ```
 
-5. Curl server 
+5. Curl server
 
 ```
-time curl "localhost:3000/urlinfo/1/www.siteJ.com?a=b"
+time curl "localhost:8080/urlinfo/1/www.siteJ.com?a=b"
 {"safe":true}
 real	0m0.025s
 user	0m0.004s
@@ -39,7 +41,7 @@ sys	0m0.007s
 Using https://github.com/cmpxchg16/gobench
 
 ```
-$ ~/go/bin/gobench -u http://localhost:3000/urlinfo/1/www.siteJ.com?a=b -k=true -c 50 -t 5
+$ ~/go/bin/gobench -u http://localhost:8080/urlinfo/1/www.siteJ.com?a=b -k=true -c 50 -t 5
 Dispatching 50 clients
 Waiting for results...
 
@@ -55,28 +57,28 @@ Test time:                               5 sec
 
 # NOTES BELOW
 -----
- 
+
 Write a small web service, in the language/framework your choice,
 that responds to GET requests where the caller passes in a URL and
 the service responds with some information about that URL. The GET
 requests look like this:
- 
+
         GET /urlinfo/1/{hostname_and_port}/{original_path_and_query_string}
- 
+
 The caller wants to know if it is safe to access that URL or not.
 As the implementer you get to choose the response format and
 structure. These lookups are blocking users from accessing the URL
 until the caller receives a response from your service.
- 
+
 Give some thought to the following:
- 
+
   * The size of the URL list could grow infinitely, how might you
   scale this beyond the memory capacity of this VM? Bonus if you
   implement this.
- 
+
   * The number of requests may exceed the capacity of this VM, how
   might you solve that? Bonus if you implement this.
- 
+
   * What are some strategies you might use to update the service
   with new URLs? Updates may be as much as 5 thousand URLs a day
   with updates arriving every 10 minutes.
@@ -96,7 +98,7 @@ Give some thought to the following:
 - persistence required
 - very read-heavy
 - SQL, NoSQL, K/V stores might all be plausibly used, at extreme scale something like Cassandra might be a good choice
-- at scale it would need sharding 
+- at scale it would need sharding
 - hostname is an obvious sharding key, or potentially hostname + path, but really any N letters of the target URL should work if the sharding gets extreme.
 - also need a request cache and good caching strategy
 
@@ -108,10 +110,10 @@ Give some thought to the following:
 - is it safe to assume that we're only assessing the safety of the URL for GET requests? ie no other verbs
 - what are the length limits on the target URL if any?  
 - how many requests expected per day (maximum)?
-- how long is the longest we can reasonably block clients by not giving them results before the service is useless? 
+- how long is the longest we can reasonably block clients by not giving them results before the service is useless?
 - what is the target response time? obviously < 1ms is ideal, but what is an acceptable target time?
-- how complicated is the algorithm to decide whether the site is safe? 
-- how long does the assessment take? is it fast enough to plausibly return results fast enough for the service to respond? 
+- how complicated is the algorithm to decide whether the site is safe?
+- how long does the assessment take? is it fast enough to plausibly return results fast enough for the service to respond?
 - how long can we hold client request open for?
 - how do we deal with sites that are slow to respond? can we cut them off and call them unsafe after X seconds?
 - overview is currently based on the assumption that the assessment is slow enough that you don't want to hold the request open in the case of requests for previously uncrawled sites.  this may be false.
@@ -138,7 +140,7 @@ Give some thought to the following:
 - remove duplicate query params
 
 ### Any thoughts on how to constrain the persistence size of the URLs?
-- Hmm, you could think about hashing them, but you'd have to deal with collisions somehow, and the hashed value wouldn't be useful for analytics, etc.  If you needed to go this way, you could look at storing multiple hashes to resolve collisions (at the expense of speed, obviously) and store the url in some other bigger, slower, eventually consistent data storage for analytics. 
+- Hmm, you could think about hashing them, but you'd have to deal with collisions somehow, and the hashed value wouldn't be useful for analytics, etc.  If you needed to go this way, you could look at storing multiple hashes to resolve collisions (at the expense of speed, obviously) and store the url in some other bigger, slower, eventually consistent data storage for analytics.
 - Using trie would cut down storage requirements significantly
 - In a relational db, you could split the hostnames into a separate table and avoid duplication there at the expense of retrieval speed
 - You could use a compression algorithm to compress the url before storing

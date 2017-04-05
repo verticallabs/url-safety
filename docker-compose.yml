@@ -3,3 +3,19 @@ cassandra:
     ports:
         - "7000:7000"
         - "9042:9042"
+urlsafety:
+    build: .
+    links:
+      - cassandra
+    command: "go run /app/urlsafety.go"
+    environment:
+      - "CASSANDRA_HOST=cassandra"
+    ports:
+      - "8080:8080"
+seed:
+    build: .
+    links:
+      - cassandra
+    command: "go run /app/seed/seed.go"
+    environment:
+      - "CASSANDRA_HOST=cassandra"

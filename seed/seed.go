@@ -12,6 +12,7 @@ import (
     "unicode/utf8"
 )
 
+var cassandraHost = os.Getenv("CASSANDRA_HOST")
 var cluster *gocql.ClusterConfig
 var session *gocql.Session
 var legitChars string = "abcdefghijklmnopqrstuvwxyz1234567890-"
@@ -54,24 +55,29 @@ func generateUrls(startAt int, length int) ([]Info) {
 }
 
 func main() {
+  fmt.Println("URL SAFETY SEED attaching to cassandra at " + cassandraHost)
+  var err error;
 
 	//init db
-	cluster = gocql.NewCluster(os.GetEnv("CASSANDRA_IP"))
-	cluster.Keyspace = "url-safety"
-	session, _ = cluster.CreateSession()
+	cluster = gocql.NewCluster(cassandraHost)
+	cluster.Keyspace = "urlsafety"
+	session, err = cluster.CreateSession()
+  if(err != nil) {
+    log.Fatal("CreateSession: ", err)
+  }
 
 	//init rand
 	rand.Seed(time.Now().UnixNano());
 
 	//clean the table
-	err := session.Query("TRUNCATE urls").Exec()
+	err = session.Query("TRUNCATE urls").Exec()
 	if(err != nil) {
 		log.Fatal("Truncate: ", err)
 	}
 
 	//generate fake data
 	count := 4000000;
-	chunk := 100;
+	chunk := 50;
 	statement := "INSERT INTO urls(hostname, rest, safe, updated) VALUES(?, ?, ?, ?)"
 
 	for i := 0; i<count/chunk; i++ {

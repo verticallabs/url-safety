@@ -12,6 +12,7 @@ import (
     //"net/http/httputil"
 )
 
+var cassandraHost = os.Getenv("CASSANDRA_HOST")
 var prefix string = "/urlinfo/1/"
 var cluster *gocql.ClusterConfig
 var session *gocql.Session
@@ -104,19 +105,24 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+  fmt.Println("URL SAFETY SERVER attaching to cassandra at " + cassandraHost)
+  var err error;
 
 	//init db
-	cluster = gocql.NewCluster(os.Getenv('CASSANDRA_IP'))
-	cluster.Keyspace = "url-safety"
-	session, _ = cluster.CreateSession()
+	cluster = gocql.NewCluster(cassandraHost)
+	cluster.Keyspace = "urlsafety"
+	session, err = cluster.CreateSession()
+  if(err != nil) {
+    log.Fatal("CreateSession: ", err)
+  }
 
 	//setup http handler
-    http.HandleFunc(prefix, requestHandler)
-    err := http.ListenAndServe(":8080", nil)
-    if err != nil {
-        log.Fatal("ListenAndServe: ", err)
-    }
+  http.HandleFunc(prefix, requestHandler)
+  err = http.ListenAndServe(":8080", nil)
+  if err != nil {
+      log.Fatal("ListenAndServe: ", err)
+  }
 
-    //clean up session
-    defer session.Close()
+  //clean up session
+  defer session.Close()
 }
